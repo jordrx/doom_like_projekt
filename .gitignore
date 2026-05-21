@@ -1,0 +1,16 @@
+# Exe
+doom_like_projekt
+*.out
+*.exe
+
+# Object files
+*.o
+*.a
+
+# IDE folders
+.vscode/
+.idea/
+
+# System files
+.DS_Store
+Thumbs.db
