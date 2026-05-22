@@ -110,13 +110,13 @@ int main()
         int top = (SCREEN_H - wallH) / 2;
         int bot = (SCREEN_H + wallH) / 2;
 
-        // ceiling drawing
+        // Ceiling drawing
         sf::RectangleShape ceiling(sf::Vector2f(1, top));
         ceiling.setPosition(sf::Vector2f(col, 0));
         ceiling.setFillColor(sf::Color(50, 50, 50));
         window.draw(ceiling);
 
-        // wall drawing
+        // Wall drawing
         int brightness = (int)(255 / (1 + dist * dist * 0.1f));
         brightness = std::max(0, std::min(255, brightness)); // To be sure it is between 0 and 255
         sf::RectangleShape wall(sf::Vector2f(1, wallH));
@@ -124,14 +124,34 @@ int main()
         wall.setFillColor(sf::Color(brightness, brightness, brightness));
         window.draw(wall);
 
-        // floor drawing
+        // Floor drawing
         sf::RectangleShape floor(sf::Vector2f(1, SCREEN_H - bot));
         floor.setPosition(sf::Vector2f(col, bot));
         floor.setFillColor(sf::Color(100, 100, 100));
         window.draw(floor);
 
         
+        
     }
+    // Minimap
+        const int TILE = 10; //size of the tile in pixels
+
+        for (int y = 0; y < MAP_H; y++)
+        {
+            for (int x = 0; x < MAP_W; x++)
+            {
+                sf::RectangleShape tile(sf::Vector2f(TILE - 1, TILE - 1));
+                tile.setPosition(sf::Vector2f(x * TILE, y * TILE));
+                tile.setFillColor(map[y][x] == 1 ? sf::Color::White : sf::Color::Black);
+                window.draw(tile);
+            }
+        }
+
+        // Player on minimap
+        sf::CircleShape player(5);
+        player.setPosition(sf::Vector2f(playerX * TILE - 5, playerY * TILE - 5));
+        player.setFillColor(sf::Color::Red);
+        window.draw(player);
 
         
         window.display();
