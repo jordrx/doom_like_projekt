@@ -59,6 +59,13 @@ int main()
         if (map[int(playerY + dy)][int(playerX)] == 0)
             playerY += dy; 
     }
+    if(sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Down))
+    {
+        if (map[int(playerY)][int(playerX - dx)] == 0)
+            playerX -= dx;
+        if (map[int(playerY - dy)][int(playerX)] == 0)
+            playerY -= dy;
+    }
 
         window.clear(sf::Color::Blue);
         window.display();
