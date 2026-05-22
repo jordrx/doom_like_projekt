@@ -1,11 +1,19 @@
 #include <SFML/Graphics.hpp>
 #include <CMath>
+#include <string>
 
 const int MAP_W = 8;
 const int MAP_H = 8;
 
 const float MOVE_SPEED = 3.0f;
 const float ROTATE_SPEED = 3.0f;
+
+const float FOV = 3.14159f / 3.0f; // fov 60°
+const int SCREEN_W = 800;
+const int SCREEN_H = 600;
+
+const float MAX_DEATH = 20.0f;
+
 
 
 int map[MAP_H][MAP_W] = {
@@ -34,6 +42,7 @@ int main()
 
     while (window.isOpen())
     {
+        window.clear(sf::Color::Blue);
         float dt = clock.restart().asSeconds();
         window.setTitle("x: " + std::to_string(playerX) + " y: " + std::to_string(playerY) + " angle: " + std::to_string(angle));
 
@@ -43,7 +52,7 @@ int main()
                 window.close();
         }
         
-    //Rotation et déplacement du joueur
+    // Player Rotation
     if(sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left))
         angle -= ROTATE_SPEED * dt;
     if(sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right))
@@ -52,6 +61,7 @@ int main()
     float dx = std::cos(angle) * MOVE_SPEED * dt;
     float dy = std::sin(angle) * MOVE_SPEED * dt;
 
+    // Player Movement
     if(sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Up))
     {
         if (map[int(playerY)][int(playerX + dx)] == 0)
@@ -67,7 +77,60 @@ int main()
             playerY -= dy;
     }
 
-        window.clear(sf::Color::Blue);
+    // Raycasting
+    for (int col = 0; col < SCREEN_W; col++)
+    {
+        // Angle of the ray depending on column
+        float rayAngle = angle - FOV /2.0f + FOV * col / float(SCREEN_W);
+        
+        // Direction vector of the ray
+        float rayDirX = std::cos(rayAngle);
+        float rayDirY = std::sin(rayAngle);
+
+        bool hit = false;
+        float dist = 0.0f;
+        float rayX = 0.0f;
+        float rayY = 0.0f;
+
+        while (!hit && dist < MAX_DEATH){
+            dist += 0.05f;
+            rayX = playerX + rayDirX * dist;
+            rayY = playerY + rayDirY * dist;
+
+            if (map[int(rayY)][int(rayX)] == 1)
+                hit = true;
+            
+        }
+        
+        // Remove fish-eye effect
+        dist *= std::cos(rayAngle - angle); 
+
+        // Wall height on screen
+        int wallH = (int)(SCREEN_H / dist);
+        int top = (SCREEN_H - wallH) / 2;
+        int bot = (SCREEN_H + wallH) / 2;
+
+        // ceiling drawing
+        sf::RectangleShape ceiling(sf::Vector2f(1, top));
+        ceiling.setPosition(sf::Vector2f(col, 0));
+        ceiling.setFillColor(sf::Color(50, 50, 50));
+        window.draw(ceiling);
+
+        // wall drawing
+        sf::RectangleShape wall(sf::Vector2f(1, wallH));
+        wall.setPosition(sf::Vector2f(col, top));
+        wall.setFillColor(sf::Color(200, 200, 200));
+        window.draw(wall);
+
+        // floor drawing
+        sf::RectangleShape floor(sf::Vector2f(1, SCREEN_H - bot));
+        floor.setPosition(sf::Vector2f(col, bot));
+        floor.setFillColor(sf::Color(100, 100, 100));
+        window.draw(floor);
+
+    }
+
+        
         window.display();
     }
 
