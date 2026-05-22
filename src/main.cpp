@@ -117,9 +117,11 @@ int main()
         window.draw(ceiling);
 
         // wall drawing
+        int brightness = (int)(255 / (1 + dist * dist * 0.1f));
+        brightness = std::max(0, std::min(255, brightness)); // To be sure it is between 0 and 255
         sf::RectangleShape wall(sf::Vector2f(1, wallH));
         wall.setPosition(sf::Vector2f(col, top));
-        wall.setFillColor(sf::Color(200, 200, 200));
+        wall.setFillColor(sf::Color(brightness, brightness, brightness));
         window.draw(wall);
 
         // floor drawing
@@ -128,6 +130,7 @@ int main()
         floor.setFillColor(sf::Color(100, 100, 100));
         window.draw(floor);
 
+        
     }
 
         
