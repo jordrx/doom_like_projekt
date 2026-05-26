@@ -68,7 +68,7 @@ int main()
     float gunY = 0.0f;        // offset vertical du fusil (0 = position normale)
     float gunTimer = 0.0f;    // timer pour l'animation
 
-
+    window.setMouseCursorVisible(false);
     //game loop
     while (window.isOpen())
     {
@@ -111,7 +111,11 @@ int main()
             angle -= ROTATE_SPEED * dt;
         if(sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right))
             angle += ROTATE_SPEED * dt;
-
+        // Rotation mouse
+        sf::Vector2i mousePos = sf::Mouse::getPosition(window);
+        sf::Mouse::setPosition(sf::Vector2i(SCREEN_W / 2, SCREEN_H / 2), window);
+        int mouseDeltaX = mousePos.x - SCREEN_W / 2;
+        angle += mouseDeltaX * 0.002f;
         float dx = std::cos(angle) * MOVE_SPEED * dt;
         float dy = std::sin(angle) * MOVE_SPEED * dt;
 
