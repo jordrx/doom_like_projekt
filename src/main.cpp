@@ -28,7 +28,16 @@ int map[MAP_H][MAP_W] = {
     {1, 1, 1, 1, 1, 1, 1, 1}
 };
 
+struct Enemy {
+    float x, y;
+    bool alive;
+};
 
+std::vector<Enemy> enemies = {
+    {2.0f, 2.0f, true},
+    {5.0f, 2.0f, true},
+    {5.0f, 5.0f, true},
+};
 
 int main()
 {
@@ -45,6 +54,7 @@ int main()
     if (!texture.resize(sf::Vector2u(SCREEN_W, SCREEN_H)))
     return -1;
     std::vector<uint8_t> pixels(SCREEN_W * SCREEN_H * 4, 255);
+    std::vector<float> zBuffer(SCREEN_W, 0.0f);
     sf::Sprite sprite(texture);
 
     sf::Image wallTexture;
@@ -213,6 +223,8 @@ int main()
             int top = std::max(0, top_real);          // clampé pour le dessin
             int bot = std::min(SCREEN_H, (SCREEN_H + wallH) / 2);
 
+            // Après le calcul de dist, avant le dessin
+            zBuffer[col] = dist;
 
             // Column drawing
             for (int y = 0; y < SCREEN_H; y++)
@@ -249,6 +261,59 @@ int main()
                 pixels[index+3] = 255;
             }
         }
+        // Enemies
+        for (auto& e : enemies)
+        {
+            if (!e.alive) continue;
+            // Direction et plan caméra corrects
+            float dirX = std::cos(angle);
+            float dirY = std::sin(angle);
+            float planeX = -std::sin(angle) * std::tan(FOV / 2.0f);
+            float planeY =  std::cos(angle) * std::tan(FOV / 2.0f);
+
+            float ex = e.x - playerX;
+            float ey = e.y - playerY;
+
+            float invDet = 1.0f / (planeX * dirY - dirX * planeY);
+            float transformX = invDet * (dirY * ex - dirX * ey);
+            float transformY = invDet * (-planeY * ex + planeX * ey);
+
+            // Si l'ennemi est derrière le joueur, skip
+            if (transformY <= 0) continue;
+
+            // Position à l'écran
+            int spriteScreenX = (int)((SCREEN_W / 2) * (1 + transformX / transformY));
+
+            // Taille du sprite
+            int spriteH = std::abs((int)(SCREEN_H / transformY));
+            int spriteW = spriteH;
+
+            int topY = (SCREEN_H - spriteH) / 2;
+            int botY = (SCREEN_H + spriteH) / 2;
+            int leftX = spriteScreenX - spriteW / 2;
+            int rightX = spriteScreenX + spriteW / 2;
+
+            for (int x = leftX; x < rightX; x++)
+            {
+                // Hors écran ou derrière un mur
+                if (x < 0 || x >= SCREEN_W) continue;
+                if (transformY >= zBuffer[x]) continue;
+
+                for (int y = topY; y < botY; y++)
+                {
+                    if (y < 0 || y >= SCREEN_H) continue;
+
+                    int index = (y * SCREEN_W + x) * 4;
+
+                    // Couleur simple verte pour l'instant
+                    pixels[index]   = 0;
+                    pixels[index+1] = 200;
+                    pixels[index+2] = 0;
+                    pixels[index+3] = 255;
+                }
+            }
+        }
+
         // Gun drawing
         int gunW = 120;
         int gunH = 80;
@@ -293,7 +358,6 @@ int main()
         texture.update(pixels.data());
         window.draw(sprite);
 
-
         // Minimap
         const int TILE = 10; //size of the tile in pixels
 
@@ -313,6 +377,16 @@ int main()
         player.setPosition(sf::Vector2f(playerX * TILE - 5, playerY * TILE - 5));
         player.setFillColor(sf::Color::Red);
         window.draw(player);
+
+        // Enemies on minimap
+        for (auto& e : enemies)
+        {
+            if (!e.alive) continue;
+            sf::CircleShape dot(4);
+            dot.setFillColor(sf::Color::Green);
+            dot.setPosition(sf::Vector2f(e.x * TILE - 4, e.y * TILE - 4));
+            window.draw(dot);
+        }
 
         
         window.display();
