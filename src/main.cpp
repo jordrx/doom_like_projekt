@@ -1,6 +1,7 @@
 #include <SFML/Graphics.hpp>
 #include <CMath>
 #include <string>
+#include <cstdint>
 
 const int MAP_W = 8;
 const int MAP_H = 8;
@@ -40,9 +41,15 @@ int main()
 
     sf::Clock clock;
 
+    sf::Texture texture;
+    texture.resize(sf::Vector2u(SCREEN_W, SCREEN_H));
+    if (!texture.resize(sf::Vector2u(SCREEN_W, SCREEN_H)))
+    return -1;
+    std::vector<uint8_t> pixels(SCREEN_W * SCREEN_H * 4, 255);
+    sf::Sprite sprite(texture);
+
     while (window.isOpen())
     {
-        window.clear(sf::Color::Blue);
         float dt = clock.restart().asSeconds();
         window.setTitle("x: " + std::to_string(playerX) + " y: " + std::to_string(playerY) + " angle: " + std::to_string(angle));
 
@@ -80,59 +87,104 @@ int main()
     // Raycasting
     for (int col = 0; col < SCREEN_W; col++)
     {
-        // Angle of the ray depending on column
-        float rayAngle = angle - FOV /2.0f + FOV * col / float(SCREEN_W);
-        
-        // Direction vector of the ray
+        float rayAngle = angle - FOV / 2.0f + FOV * col / float(SCREEN_W);
         float rayDirX = std::cos(rayAngle);
         float rayDirY = std::sin(rayAngle);
 
-        bool hit = false;
-        float dist = 0.0f;
-        float rayX = 0.0f;
-        float rayY = 0.0f;
+        // Case actuelle du joueur
+        int mapX = (int)playerX;
+        int mapY = (int)playerY;
 
-        while (!hit && dist < MAX_DEATH){
-            dist += 0.05f;
-            rayX = playerX + rayDirX * dist;
-            rayY = playerY + rayDirY * dist;
+        // Distance pour traverser une case entière
+        float deltaDistX = std::abs(1.0f / rayDirX);
+        float deltaDistY = std::abs(1.0f / rayDirY);
 
-            if (map[int(rayY)][int(rayX)] == 1)
-                hit = true;
-            
+        // Direction de progression dans la map
+        int stepX, stepY;
+
+        // Distance initiale jusqu'au premier bord de case
+        float sideDistX, sideDistY;
+
+        if (rayDirX < 0)
+        {
+            stepX = -1;
+            sideDistX = (playerX - mapX) * deltaDistX;
         }
-        
-        // Remove fish-eye effect
-        dist *= std::cos(rayAngle - angle); 
+        else
+        {
+            stepX = 1;
+            sideDistX = (mapX + 1.0f - playerX) * deltaDistX;
+        }
 
-        // Wall height on screen
+        if (rayDirY < 0)
+        {
+            stepY = -1;
+            sideDistY = (playerY - mapY) * deltaDistY;
+        }
+        else
+        {
+            stepY = 1;
+            sideDistY = (mapY + 1.0f - playerY) * deltaDistY;
+        }
+
+        // DDA — on saute de case en case
+        bool hit = false;
+        int side; // 0 = mur vertical, 1 = mur horizontal
+
+        while (!hit)
+        {
+            if (sideDistX < sideDistY)
+            {
+                sideDistX += deltaDistX;
+                mapX += stepX;
+                side = 0;
+            }
+            else
+            {
+                sideDistY += deltaDistY;
+                mapY += stepY;
+                side = 1;
+            }
+
+            if (map[mapY][mapX] == 1)
+                hit = true;
+        }
+
+        // Distance corrigée (pas besoin de fish-eye avec DDA !)
+        float dist;
+        if (side == 0)
+            dist = (mapX - playerX + (1 - stepX) / 2.0f) / rayDirX;
+        else
+            dist = (mapY - playerY + (1 - stepY) / 2.0f) / rayDirY;
+
+        // Ombrage — murs horizontaux plus sombres
+        int brightness = std::max(0, std::min(255, (int)(255 / (1 + dist * dist * 0.1f))));
+        if (side == 1) brightness /= 2; // côté sombre
+
         int wallH = (int)(SCREEN_H / dist);
-        int top = (SCREEN_H - wallH) / 2;
-        int bot = (SCREEN_H + wallH) / 2;
+        int top = std::max(0, (SCREEN_H - wallH) / 2);
+        int bot = std::min(SCREEN_H, (SCREEN_H + wallH) / 2);
 
-        // Ceiling drawing
-        sf::RectangleShape ceiling(sf::Vector2f(1, top));
-        ceiling.setPosition(sf::Vector2f(col, 0));
-        ceiling.setFillColor(sf::Color(50, 50, 50));
-        window.draw(ceiling);
-
-        // Wall drawing
-        int brightness = (int)(255 / (1 + dist * dist * 0.1f));
-        brightness = std::max(0, std::min(255, brightness)); // To be sure it is between 0 and 255
-        sf::RectangleShape wall(sf::Vector2f(1, wallH));
-        wall.setPosition(sf::Vector2f(col, top));
-        wall.setFillColor(sf::Color(brightness, brightness, brightness));
-        window.draw(wall);
-
-        // Floor drawing
-        sf::RectangleShape floor(sf::Vector2f(1, SCREEN_H - bot));
-        floor.setPosition(sf::Vector2f(col, bot));
-        floor.setFillColor(sf::Color(100, 100, 100));
-        window.draw(floor);
-
-        
-        
+        for (int y = 0; y < SCREEN_H; y++)
+        {
+            int index = (y * SCREEN_W + col) * 4;
+            if (y < top)
+            {
+                pixels[index]=50; pixels[index+1]=50; pixels[index+2]=50;
+            }
+            else if (y < bot)
+            {
+                pixels[index]=brightness; pixels[index+1]=brightness; pixels[index+2]=brightness;
+            }
+            else
+            {
+                pixels[index]=100; pixels[index+1]=100; pixels[index+2]=100;
+            }
+            pixels[index+3] = 255;
+        }
     }
+    texture.update(pixels.data());
+    window.draw(sprite);
     // Minimap
         const int TILE = 10; //size of the tile in pixels
 
