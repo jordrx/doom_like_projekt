@@ -51,8 +51,18 @@ int main()
     if (!wallTexture.loadFromFile("wall.png"))
         return -1;
     sf::Vector2u texSize = wallTexture.getSize();
+
+    // Gun
+    enum GunState { IDLE, SHOOT, RELOAD };
+    GunState gunState = IDLE;
+    float gunY = 0.0f;        // offset vertical du fusil (0 = position normale)
+    float gunTimer = 0.0f;    // timer pour l'animation
+
+
+    //game loop
     while (window.isOpen())
     {
+        
         float dt = clock.restart().asSeconds();
         window.setTitle("x: " + std::to_string(playerX) + " y: " + std::to_string(playerY) + " angle: " + std::to_string(angle));
 
@@ -61,167 +71,230 @@ int main()
             if (event->is<sf::Event::Closed>())
                 window.close();
         }
-        
-    // Player Rotation
-    if(sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left))
-        angle -= ROTATE_SPEED * dt;
-    if(sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right))
-        angle += ROTATE_SPEED * dt;
-
-    float dx = std::cos(angle) * MOVE_SPEED * dt;
-    float dy = std::sin(angle) * MOVE_SPEED * dt;
-
-    // Player Movement
-    if(sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Up))
-    {
-        if (map[int(playerY)][int(playerX + dx)] == 0)
-            playerX += dx;
-        if (map[int(playerY + dy)][int(playerX)] == 0)
-            playerY += dy; 
-    }
-    if(sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Down))
-    {
-        if (map[int(playerY)][int(playerX - dx)] == 0)
-            playerX -= dx;
-        if (map[int(playerY - dy)][int(playerX)] == 0)
-            playerY -= dy;
-    }
-
-    // Raycasting
-    for (int col = 0; col < SCREEN_W; col++)
-    {
-        float rayAngle = angle - FOV / 2.0f + FOV * col / float(SCREEN_W);
-        float rayDirX = std::cos(rayAngle);
-        float rayDirY = std::sin(rayAngle);
-
-        // Case actuelle du joueur
-        int mapX = (int)playerX;
-        int mapY = (int)playerY;
-
-        // Distance pour traverser une case entière
-        float deltaDistX = std::abs(1.0f / rayDirX);
-        float deltaDistY = std::abs(1.0f / rayDirY);
-
-        // Direction de progression dans la map
-        int stepX, stepY;
-
-        // Distance initiale jusqu'au premier bord de case
-        float sideDistX, sideDistY;
-
-        if (rayDirX < 0)
+        // Tir
+        if (sf::Mouse::isButtonPressed(sf::Mouse::Button::Left) && gunState == IDLE)
         {
-            stepX = -1;
-            sideDistX = (playerX - mapX) * deltaDistX;
-        }
-        else
-        {
-            stepX = 1;
-            sideDistX = (mapX + 1.0f - playerX) * deltaDistX;
+            gunState = SHOOT;
+            gunTimer = 0.0f;
         }
 
-        if (rayDirY < 0)
+        // Animation
+        if (gunState == SHOOT)
         {
-            stepY = -1;
-            sideDistY = (playerY - mapY) * deltaDistY;
+            gunY -= 800.0f * dt;  // remonte vite
+            gunTimer += dt;
+            if (gunTimer > 0.08f) // après 80ms passe en reload
+                gunState = RELOAD;
         }
-        else
+        else if (gunState == RELOAD)
         {
-            stepY = 1;
-            sideDistY = (mapY + 1.0f - playerY) * deltaDistY;
-        }
-
-        // DDA — on saute de case en case
-        bool hit = false;
-        int side; // 0 = mur vertical, 1 = mur horizontal
-
-        while (!hit)
-        {
-            if (sideDistX < sideDistY)
+            gunY += 400.0f * dt;  // redescend doucement
+            if (gunY >= 0.0f)
             {
-                sideDistX += deltaDistX;
-                mapX += stepX;
-                side = 0;
+                gunY = 0.0f;
+                gunState = IDLE;
+            }
+        }
+        
+        // Player Rotation
+        if(sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left))
+            angle -= ROTATE_SPEED * dt;
+        if(sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right))
+            angle += ROTATE_SPEED * dt;
+
+        float dx = std::cos(angle) * MOVE_SPEED * dt;
+        float dy = std::sin(angle) * MOVE_SPEED * dt;
+
+        // Player Movement
+        if(sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Up))
+        {
+            if (map[int(playerY)][int(playerX + dx)] == 0)
+                playerX += dx;
+            if (map[int(playerY + dy)][int(playerX)] == 0)
+                playerY += dy; 
+        }
+        if(sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Down))
+        {
+            if (map[int(playerY)][int(playerX - dx)] == 0)
+                playerX -= dx;
+            if (map[int(playerY - dy)][int(playerX)] == 0)
+                playerY -= dy;
+        }
+
+        // Raycasting
+        for (int col = 0; col < SCREEN_W; col++)
+        {
+            float rayAngle = angle - FOV / 2.0f + FOV * col / float(SCREEN_W);
+            float rayDirX = std::cos(rayAngle);
+            float rayDirY = std::sin(rayAngle);
+
+            // Case actuelle du joueur
+            int mapX = (int)playerX;
+            int mapY = (int)playerY;
+
+            // Distance pour traverser une case entière
+            float deltaDistX = std::abs(1.0f / rayDirX);
+            float deltaDistY = std::abs(1.0f / rayDirY);
+
+            // Direction de progression dans la map
+            int stepX, stepY;
+
+            // Distance initiale jusqu'au premier bord de case
+            float sideDistX, sideDistY;
+
+            if (rayDirX < 0)
+            {
+                stepX = -1;
+                sideDistX = (playerX - mapX) * deltaDistX;
             }
             else
             {
-                sideDistY += deltaDistY;
-                mapY += stepY;
-                side = 1;
+                stepX = 1;
+                sideDistX = (mapX + 1.0f - playerX) * deltaDistX;
             }
 
-            if (map[mapY][mapX] == 1)
-                hit = true;
-        }
-
-        // Distance corrigée (pas besoin de fish-eye avec DDA !)
-        float dist;
-        if (side == 0)
-            dist = (mapX - playerX + (1 - stepX) / 2.0f) / rayDirX;
-        else
-            dist = (mapY - playerY + (1 - stepY) / 2.0f) / rayDirY;
-        // Où le rayon a touché le mur
-        float wallX;
-        if (side == 0)
-            wallX = playerY + dist * rayDirY;
-        else
-            wallX = playerX + dist * rayDirX;
-        wallX -= std::floor(wallX);
-
-        // Colonne de texture correspondante
-        int texX = (int)(wallX * texSize.x);
-        if (side == 0 && rayDirX > 0) texX = texSize.x - texX - 1;
-        if (side == 1 && rayDirY < 0) texX = texSize.x - texX - 1;
-
-     
-
-        int wallH = (int)(SCREEN_H / dist);
-        int top_real = (SCREEN_H - wallH) / 2;  // peut être négatif
-        int top = std::max(0, top_real);          // clampé pour le dessin
-        int bot = std::min(SCREEN_H, (SCREEN_H + wallH) / 2);
-
-
-        // Column drawing
-        for (int y = 0; y < SCREEN_H; y++)
-        {
-            int index = (y * SCREEN_W + col) * 4;
-            if (y < top)
+            if (rayDirY < 0)
             {
-                pixels[index]=50; pixels[index+1]=50; pixels[index+2]=50;
+                stepY = -1;
+                sideDistY = (playerY - mapY) * deltaDistY;
             }
-            else if (y < bot)
+            else
             {
-                                // Quelle ligne de texture ?
-                int texY = ((y - top_real) * (int)texSize.y) / wallH;
-                texY = std::max(0, std::min((int)texSize.y - 1, texY));
+                stepY = 1;
+                sideDistY = (mapY + 1.0f - playerY) * deltaDistY;
+            }
 
-                sf::Color color = wallTexture.getPixel(sf::Vector2u(texX, texY));
+            // DDA — on saute de case en case
+            bool hit = false;
+            int side; // 0 = mur vertical, 1 = mur horizontal
 
-                // Assombrir si mur horizontal
-                if (side == 1)
+            while (!hit)
+            {
+                if (sideDistX < sideDistY)
                 {
-                    color.r /= 2;
-                    color.g /= 2;
-                    color.b /= 2;
+                    sideDistX += deltaDistX;
+                    mapX += stepX;
+                    side = 0;
+                }
+                else
+                {
+                    sideDistY += deltaDistY;
+                    mapY += stepY;
+                    side = 1;
                 }
 
-                pixels[index]   = color.r;
-                pixels[index+1] = color.g;
-                pixels[index+2] = color.b;
+                if (map[mapY][mapX] == 1)
+                    hit = true;
             }
+
+            // Distance corrigée (pas besoin de fish-eye avec DDA !)
+            float dist;
+            if (side == 0)
+                dist = (mapX - playerX + (1 - stepX) / 2.0f) / rayDirX;
             else
+                dist = (mapY - playerY + (1 - stepY) / 2.0f) / rayDirY;
+            // Où le rayon a touché le mur
+            float wallX;
+            if (side == 0)
+                wallX = playerY + dist * rayDirY;
+            else
+                wallX = playerX + dist * rayDirX;
+            wallX -= std::floor(wallX);
+
+            // Colonne de texture correspondante
+            int texX = (int)(wallX * texSize.x);
+            if (side == 0 && rayDirX > 0) texX = texSize.x - texX - 1;
+            if (side == 1 && rayDirY < 0) texX = texSize.x - texX - 1;
+
+        
+
+            int wallH = (int)(SCREEN_H / dist);
+            int top_real = (SCREEN_H - wallH) / 2;  // peut être négatif
+            int top = std::max(0, top_real);          // clampé pour le dessin
+            int bot = std::min(SCREEN_H, (SCREEN_H + wallH) / 2);
+
+
+            // Column drawing
+            for (int y = 0; y < SCREEN_H; y++)
             {
-                pixels[index]=100; pixels[index+1]=100; pixels[index+2]=100;
+                int index = (y * SCREEN_W + col) * 4;
+                if (y < top)
+                {
+                    pixels[index]=50; pixels[index+1]=50; pixels[index+2]=50;
+                }
+                else if (y < bot)
+                {
+                    // Quelle ligne de texture ?
+                    int texY = ((y - top_real) * (int)texSize.y) / wallH;
+                    texY = std::max(0, std::min((int)texSize.y - 1, texY));
+
+                    sf::Color color = wallTexture.getPixel(sf::Vector2u(texX, texY));
+
+                    // Assombrir si mur horizontal
+                    if (side == 1)
+                    {
+                        color.r /= 2;
+                        color.g /= 2;
+                        color.b /= 2;
+                    }
+
+                    pixels[index]   = color.r;
+                    pixels[index+1] = color.g;
+                    pixels[index+2] = color.b;
+                }
+                else
+                {
+                    pixels[index]=100; pixels[index+1]=100; pixels[index+2]=100;
+                }
+                pixels[index+3] = 255;
             }
-            pixels[index+3] = 255;
         }
-    }
+        // Gun drawing
+        int gunW = 120;
+        int gunH = 80;
+        int gunBaseX = SCREEN_W / 2 - gunW / 2;
+        int gunBaseY = (int)(SCREEN_H - gunH + gunY);
+
+        for (int y = 0; y < gunH; y++)
+        {
+            for (int x = 0; x < gunW; x++)
+            {
+                int screenX = gunBaseX + x;
+                int screenY = gunBaseY + y;
+
+                if (screenX < 0 || screenX >= SCREEN_W || screenY < 0 || screenY >= SCREEN_H)
+                    continue;
+
+                int index = (screenY * SCREEN_W + screenX) * 4;
+
+                // Canon
+                if (x >= 50 && x <= 70 && y <= 20)
+                {
+                    pixels[index] = 80; pixels[index+1] = 80; pixels[index+2] = 80;
+                }
+                // Corps du fusil
+                else if (x >= 20 && x <= 100 && y >= 15 && y <= 50)
+                {
+                    pixels[index] = 60; pixels[index+1] = 40; pixels[index+2] = 20;
+                }
+                // Crosse
+                else if (x >= 60 && x <= 110 && y >= 45 && y <= 75)
+                {
+                    pixels[index] = 80; pixels[index+1] = 50; pixels[index+2] = 25;
+                }
+                else
+                    continue; // transparent
+
+                pixels[index+3] = 255;
+            }
+        }
 
     
-    texture.update(pixels.data());
-    window.draw(sprite);
+        texture.update(pixels.data());
+        window.draw(sprite);
 
 
-    // Minimap
+        // Minimap
         const int TILE = 10; //size of the tile in pixels
 
         for (int y = 0; y < MAP_H; y++)
