@@ -16,6 +16,7 @@ const int SCREEN_H = 600;
 const float MAX_DEATH = 20.0f;
 
 
+float playerHP = 100.0f;
 
 int map[MAP_H][MAP_W] = {
     {1, 1, 1, 1, 1, 1, 1, 1},
@@ -116,6 +117,7 @@ int main()
                     && transformY < zBuffer[spriteScreenX])
                 {
                     e.alive = false;
+                    break; // delete if you want to enable multi-kill per shot 
                 }
             }
         }
@@ -207,6 +209,11 @@ int main()
                 if (map[int(e.y)][int(newX)] == 0) e.x = newX;
                 if (map[int(newY)][int(e.x)] == 0) e.y = newY;
             }
+
+            // Enemy damage
+            if (dist < 0.5f)
+                playerHP -= 20.0f * dt; // 20 dégâts par seconde
+            playerHP = std::max(0.0f, playerHP);
         }
         // Raycasting
         for (int col = 0; col < SCREEN_W; col++)
@@ -427,6 +434,38 @@ int main()
                 else
                     continue; // transparent
 
+                pixels[index+3] = 255;
+            }
+        }
+
+        // Health bar background
+        int barW = 200;
+        int barH = 15;
+        int barX = 10;
+        int barY = SCREEN_H - 25;
+
+        for (int y = barY; y < barY + barH; y++)
+        {
+            for (int x = barX; x < barX + barW; x++)
+            {
+                int index = (y * SCREEN_W + x) * 4;
+                pixels[index]   = 60;
+                pixels[index+1] = 0;
+                pixels[index+2] = 0;
+                pixels[index+3] = 255;
+            }
+        }
+
+        // Health bar
+        int hpW = (int)(barW * playerHP / 100.0f);
+        for (int y = barY; y < barY + barH; y++)
+        {
+            for (int x = barX; x < barX + hpW; x++)
+            {
+                int index = (y * SCREEN_W + x) * 4;
+                pixels[index]   = 200;
+                pixels[index+1] = 0;
+                pixels[index+2] = 0;
                 pixels[index+3] = 255;
             }
         }
