@@ -42,12 +42,15 @@ int main()
     sf::Clock clock;
 
     sf::Texture texture;
-    texture.resize(sf::Vector2u(SCREEN_W, SCREEN_H));
     if (!texture.resize(sf::Vector2u(SCREEN_W, SCREEN_H)))
     return -1;
     std::vector<uint8_t> pixels(SCREEN_W * SCREEN_H * 4, 255);
     sf::Sprite sprite(texture);
 
+    sf::Image wallTexture;
+    if (!wallTexture.loadFromFile("wall.png"))
+        return -1;
+    sf::Vector2u texSize = wallTexture.getSize();
     while (window.isOpen())
     {
         float dt = clock.restart().asSeconds();
@@ -156,15 +159,28 @@ int main()
             dist = (mapX - playerX + (1 - stepX) / 2.0f) / rayDirX;
         else
             dist = (mapY - playerY + (1 - stepY) / 2.0f) / rayDirY;
+        // Où le rayon a touché le mur
+        float wallX;
+        if (side == 0)
+            wallX = playerY + dist * rayDirY;
+        else
+            wallX = playerX + dist * rayDirX;
+        wallX -= std::floor(wallX);
 
-        // Ombrage — murs horizontaux plus sombres
-        int brightness = std::max(0, std::min(255, (int)(255 / (1 + dist * dist * 0.1f))));
-        if (side == 1) brightness /= 2; // côté sombre
+        // Colonne de texture correspondante
+        int texX = (int)(wallX * texSize.x);
+        if (side == 0 && rayDirX > 0) texX = texSize.x - texX - 1;
+        if (side == 1 && rayDirY < 0) texX = texSize.x - texX - 1;
+
+     
 
         int wallH = (int)(SCREEN_H / dist);
-        int top = std::max(0, (SCREEN_H - wallH) / 2);
+        int top_real = (SCREEN_H - wallH) / 2;  // peut être négatif
+        int top = std::max(0, top_real);          // clampé pour le dessin
         int bot = std::min(SCREEN_H, (SCREEN_H + wallH) / 2);
 
+
+        // Column drawing
         for (int y = 0; y < SCREEN_H; y++)
         {
             int index = (y * SCREEN_W + col) * 4;
@@ -174,7 +190,23 @@ int main()
             }
             else if (y < bot)
             {
-                pixels[index]=brightness; pixels[index+1]=brightness; pixels[index+2]=brightness;
+                                // Quelle ligne de texture ?
+                int texY = ((y - top_real) * (int)texSize.y) / wallH;
+                texY = std::max(0, std::min((int)texSize.y - 1, texY));
+
+                sf::Color color = wallTexture.getPixel(sf::Vector2u(texX, texY));
+
+                // Assombrir si mur horizontal
+                if (side == 1)
+                {
+                    color.r /= 2;
+                    color.g /= 2;
+                    color.b /= 2;
+                }
+
+                pixels[index]   = color.r;
+                pixels[index+1] = color.g;
+                pixels[index+2] = color.b;
             }
             else
             {
@@ -183,8 +215,12 @@ int main()
             pixels[index+3] = 255;
         }
     }
+
+    
     texture.update(pixels.data());
     window.draw(sprite);
+
+
     // Minimap
         const int TILE = 10; //size of the tile in pixels
 
