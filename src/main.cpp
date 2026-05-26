@@ -59,10 +59,18 @@ int main()
     std::vector<float> zBuffer(SCREEN_W, 0.0f);
     sf::Sprite sprite(texture);
 
+    // Wall texture
     sf::Image wallTexture;
     if (!wallTexture.loadFromFile("wall.png"))
         return -1;
     sf::Vector2u texSize = wallTexture.getSize();
+
+    // Enemy texture
+    sf::Image enemyTexture;
+    if (!enemyTexture.loadFromFile("enemy.png"))
+        return -1;
+    sf::Vector2u enemyTexSize = enemyTexture.getSize();
+
 
     // Gun
     enum GunState { IDLE, SHOOT, RELOAD };
@@ -383,16 +391,24 @@ int main()
                 if (x < 0 || x >= SCREEN_W) continue;
                 if (transformY >= zBuffer[x]) continue;
 
+                // Quelle colonne de texture ?
+                int texX = (int)((x - leftX) * enemyTexSize.x / spriteW);
+                int texXClamped = std::max(0, std::min((int)enemyTexSize.x - 1, texX));
+
                 for (int y = topY; y < botY; y++)
                 {
                     if (y < 0 || y >= SCREEN_H) continue;
 
-                    int index = (y * SCREEN_W + x) * 4;
+                    int texY = (int)((y - topY) * enemyTexSize.y / spriteH);
+                    texY = std::max(0, std::min((int)enemyTexSize.y - 1, texY));
 
-                    // Couleur simple verte pour l'instant
-                    pixels[index]   = 0;
-                    pixels[index+1] = 200;
-                    pixels[index+2] = 0;
+                    sf::Color color = enemyTexture.getPixel(sf::Vector2u(texXClamped, texY)); // ✅ utilise texXClamped
+                    if (color.a < 128) continue;
+
+                    int index = (y * SCREEN_W + x) * 4;
+                    pixels[index]   = color.r;
+                    pixels[index+1] = color.g;
+                    pixels[index+2] = color.b;
                     pixels[index+3] = 255;
                 }
             }
