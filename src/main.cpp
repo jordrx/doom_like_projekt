@@ -31,6 +31,7 @@ int map[MAP_H][MAP_W] = {
 struct Enemy {
     float x, y;
     bool alive;
+    float speed = 1.5f;
 };
 
 std::vector<Enemy> enemies = {
@@ -181,7 +182,32 @@ int main()
             if (map[int(playerY + strafeY)][int(playerX)] == 0) playerY += strafeY;
         }
        
+        // Enemy Movement
+        for (auto& e : enemies)
+        {
+            if (!e.alive) continue;
 
+            // Direction vers le joueur
+            float dx = playerX - e.x;
+            float dy = playerY - e.y;
+
+            // Distance
+            float dist = std::sqrt(dx * dx + dy * dy);
+
+            // Normalise la direction
+            if (dist > 0.5f) // s'arrête à 0.5 case du joueur
+            {
+                dx /= dist;
+                dy /= dist;
+
+                // Bouge avec collision
+                float newX = e.x + dx * e.speed * dt;
+                float newY = e.y + dy * e.speed * dt;
+
+                if (map[int(e.y)][int(newX)] == 0) e.x = newX;
+                if (map[int(newY)][int(e.x)] == 0) e.y = newY;
+            }
+        }
         // Raycasting
         for (int col = 0; col < SCREEN_W; col++)
         {
