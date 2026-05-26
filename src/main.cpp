@@ -413,6 +413,24 @@ int main()
                 }
             }
         }
+        
+        // Crosshair
+        int cx = SCREEN_W / 2;
+        int cy = SCREEN_H / 2;
+        int size = 10;
+
+        for (int x = cx - size; x <= cx + size; x++)
+        {
+            if (x < 0 || x >= SCREEN_W) continue;
+            int index = (cy * SCREEN_W + x) * 4;
+            pixels[index] = 255; pixels[index+1] = 255; pixels[index+2] = 255; pixels[index+3] = 255;
+        }
+        for (int y = cy - size; y <= cy + size; y++)
+        {
+            if (y < 0 || y >= SCREEN_H) continue;
+            int index = (y * SCREEN_W + cx) * 4;
+            pixels[index] = 255; pixels[index+1] = 255; pixels[index+2] = 255; pixels[index+3] = 255;
+        }
 
         // Gun drawing
         int gunW = 120;
