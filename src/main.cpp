@@ -86,6 +86,37 @@ int main()
         {
             gunState = SHOOT;
             gunTimer = 0.0f;
+
+            // Détection du tir
+            for (auto& e : enemies)
+            {
+                if (!e.alive) continue;
+
+                float dirX = std::cos(angle);
+                float dirY = std::sin(angle);
+                float planeX = -std::sin(angle) * 0.66f;
+                float planeY =  std::cos(angle) * 0.66f;
+
+                float ex = e.x - playerX;
+                float ey = e.y - playerY;
+
+                float invDet = 1.0f / (planeX * dirY - dirX * planeY);
+                float transformX = invDet * (dirY * ex - dirX * ey);
+                float transformY = invDet * (-planeY * ex + planeX * ey);
+
+                if (transformY <= 0) continue;
+
+                // Position à l'écran de l'ennemi
+                int spriteScreenX = (int)((SCREEN_W / 2) * (1 + transformX / transformY));
+
+                // Est-il au centre et pas derrière un mur ?
+                int centerTolerance = 60; // largeur du viseur
+                if (std::abs(spriteScreenX - SCREEN_W / 2) < centerTolerance
+                    && transformY < zBuffer[spriteScreenX])
+                {
+                    e.alive = false;
+                }
+            }
         }
 
         // Animation
@@ -119,21 +150,37 @@ int main()
         float dx = std::cos(angle) * MOVE_SPEED * dt;
         float dy = std::sin(angle) * MOVE_SPEED * dt;
 
+        // Strafe gauche/droite (perpendiculaire à l'angle)
+        float strafeX = std::cos(angle + 3.14159f / 2) * MOVE_SPEED * dt;
+        float strafeY = std::sin(angle + 3.14159f / 2) * MOVE_SPEED * dt;
+
         // Player Movement
-        if(sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Up))
+        if(sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Up) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Z))
         {
             if (map[int(playerY)][int(playerX + dx)] == 0)
                 playerX += dx;
             if (map[int(playerY + dy)][int(playerX)] == 0)
                 playerY += dy; 
         }
-        if(sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Down))
+        if(sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Down) || sf::Keyboard::isKeyPressed(sf::Keyboard::Key::S))
         {
             if (map[int(playerY)][int(playerX - dx)] == 0)
                 playerX -= dx;
             if (map[int(playerY - dy)][int(playerX)] == 0)
                 playerY -= dy;
         }
+
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Q))
+        {
+            if (map[int(playerY)][int(playerX - strafeX)] == 0) playerX -= strafeX;
+            if (map[int(playerY - strafeY)][int(playerX)] == 0) playerY -= strafeY;
+        }
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D))
+        {
+            if (map[int(playerY)][int(playerX + strafeX)] == 0) playerX += strafeX;
+            if (map[int(playerY + strafeY)][int(playerX)] == 0) playerY += strafeY;
+        }
+       
 
         // Raycasting
         for (int col = 0; col < SCREEN_W; col++)
