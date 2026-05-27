@@ -91,21 +91,23 @@ int main()
             if (event->is<sf::Event::Closed>())
                 window.close();
         }
-        // Tir
+        // Shoot detection
         if (sf::Mouse::isButtonPressed(sf::Mouse::Button::Left) && gunState == IDLE)
         {
             gunState = SHOOT;
             gunTimer = 0.0f;
 
-            // Détection du tir
+            float dirX = std::cos(angle);
+            float dirY = std::sin(angle);
+            float planeX = -std::sin(angle) * 0.66f;
+            float planeY =  std::cos(angle) * 0.66f;
+
+            Enemy* target = nullptr;       // ennemi le plus proche dans le viseur
+            float  closestDist = 1e9f;
+
             for (auto& e : enemies)
             {
                 if (!e.alive) continue;
-
-                float dirX = std::cos(angle);
-                float dirY = std::sin(angle);
-                float planeX = -std::sin(angle) * 0.66f;
-                float planeY =  std::cos(angle) * 0.66f;
 
                 float ex = e.x - playerX;
                 float ey = e.y - playerY;
@@ -116,18 +118,26 @@ int main()
 
                 if (transformY <= 0) continue;
 
-                // Position à l'écran de l'ennemi
                 int spriteScreenX = (int)((SCREEN_W / 2) * (1 + transformX / transformY));
+                int spriteH = std::abs((int)(SCREEN_H / transformY));
+                int spriteW = spriteH;
 
-                // Est-il au centre et pas derrière un mur ?
-                int centerTolerance = 60; // largeur du viseur
-                if (std::abs(spriteScreenX - SCREEN_W / 2) < centerTolerance
-                    && transformY < zBuffer[spriteScreenX])
+                int leftX  = spriteScreenX - spriteW / 2;
+                int rightX = spriteScreenX + spriteW / 2;
+
+                bool inCrosshair = (SCREEN_W / 2 >= leftX && SCREEN_W / 2 <= rightX
+                                    && transformY < zBuffer[SCREEN_W / 2]);
+
+                // Garde uniquement le plus proche parmi ceux dans le viseur
+                if (inCrosshair && transformY < closestDist)
                 {
-                    e.alive = false;
-                    break; // delete if you want to enable multi-kill per shot 
+                    closestDist = transformY;
+                    target = &e;
                 }
             }
+
+            if (target)
+                target->alive = false;
         }
 
         // Animation
@@ -413,7 +423,7 @@ int main()
                 }
             }
         }
-        
+
         // Crosshair
         int cx = SCREEN_W / 2;
         int cy = SCREEN_H / 2;
