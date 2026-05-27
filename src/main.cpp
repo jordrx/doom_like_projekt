@@ -134,12 +134,14 @@ int main()
     if (!enemyTexture.loadFromFile("enemy.png"))
         return -1;
     sf::Vector2u enemyTexSize = enemyTexture.getSize();
+    const uint8_t* enemyPixels = (const uint8_t*)enemyTexture.getPixelsPtr();
 
     // Projectile texture
     sf::Image projTexture;
     if (!projTexture.loadFromFile("projectile.png"))
         return -1;
     sf::Vector2u projTexSize = projTexture.getSize();
+
 
     // Sprite sheets of the gun
     sf::Image sheetIdle, sheetShoot, sheetReload;
@@ -437,6 +439,9 @@ int main()
 
             // Après le calcul de dist, avant le dessin
             zBuffer[col] = dist;
+            
+            
+
 
             // Column drawing
             for (int y = 0; y < SCREEN_H; y++)
@@ -480,7 +485,7 @@ int main()
             float db = (b.x - playerX) * (b.x - playerX) + (b.y - playerY) * (b.y - playerY);
             return da > db; // plus loin d'abord
         });
-        // Enemies
+        // Enemies drawing 
         for (auto& e : enemies)
         {
             if (!e.alive) continue;
@@ -507,35 +512,32 @@ int main()
             int spriteH = std::abs((int)(SCREEN_H / transformY));
             int spriteW = spriteH;
 
-            int topY = (SCREEN_H - spriteH) / 2;
-            int botY = (SCREEN_H + spriteH) / 2;
-            int leftX = spriteScreenX - spriteW / 2;
-            int rightX = spriteScreenX + spriteW / 2;
+            // MODIF : clamper ici évite d'itérer sur les pixels hors écran
+            int topY  = std::max(0, (SCREEN_H - spriteH) / 2);
+            int botY  = std::min(SCREEN_H, (SCREEN_H + spriteH) / 2);
+            int leftX = std::max(0, spriteScreenX - spriteW / 2);
+            int rightX= std::min(SCREEN_W, spriteScreenX + spriteW / 2);
 
             for (int x = leftX; x < rightX; x++)
             {
-                // Hors écran ou derrière un mur
-                if (x < 0 || x >= SCREEN_W) continue;
                 if (transformY >= zBuffer[x]) continue;
 
-                // Quelle colonne de texture ?
-                int texX = (int)((x - leftX) * enemyTexSize.x / spriteW);
+                int texX = (int)((x - (spriteScreenX - spriteW/2)) * enemyTexSize.x / spriteW);
                 int texXClamped = std::max(0, std::min((int)enemyTexSize.x - 1, texX));
 
                 for (int y = topY; y < botY; y++)
                 {
-                    if (y < 0 || y >= SCREEN_H) continue;
-
-                    int texY = (int)((y - topY) * enemyTexSize.y / spriteH);
+                    int texY = (int)((y - (SCREEN_H - spriteH) / 2) * enemyTexSize.y / spriteH);
                     texY = std::max(0, std::min((int)enemyTexSize.y - 1, texY));
 
-                    sf::Color color = enemyTexture.getPixel(sf::Vector2u(texXClamped, texY)); // ✅ utilise texXClamped
-                    if (color.a < 128) continue;
+                    // MODIF : accès direct au lieu de getPixel
+                    int pixelIndex = (texY * enemyTexSize.x + texXClamped) * 4;
+                    if (enemyPixels[pixelIndex + 3] < 128) continue;
 
                     int index = (y * SCREEN_W + x) * 4;
-                    pixels[index]   = color.r;
-                    pixels[index+1] = color.g;
-                    pixels[index+2] = color.b;
+                    pixels[index]   = enemyPixels[pixelIndex];
+                    pixels[index+1] = enemyPixels[pixelIndex + 1];
+                    pixels[index+2] = enemyPixels[pixelIndex + 2];
                     pixels[index+3] = 255;
                 }
             }
