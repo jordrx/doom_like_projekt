@@ -48,6 +48,8 @@ int map[MAP_H][MAP_W] = {
 struct Enemy {
     float x, y;
     bool alive;
+    bool  dying = false;  
+    float dyingTimer = 0.0f;  
     float speed = 1.5f;
 };
 
@@ -135,6 +137,13 @@ int main()
         return -1;
     sf::Vector2u enemyTexSize = enemyTexture.getSize();
     const uint8_t* enemyPixels = (const uint8_t*)enemyTexture.getPixelsPtr();
+
+    // Sprite sheet for enemy hit effect
+    sf::Image enemyHitTexture;
+    if (!enemyHitTexture.loadFromFile("enemy_hit.png"))
+        return -1;
+    sf::Vector2u enemyHitTexSize = enemyHitTexture.getSize();
+    const uint8_t* enemyHitPixels = (const uint8_t*)enemyHitTexture.getPixelsPtr();
 
     // Projectile texture
     sf::Image projTexture;
@@ -302,7 +311,8 @@ int main()
                 float ey = e.y - p.y;
                 if (ex * ex + ey * ey < 0.3f * 0.3f)
                 {
-                    e.alive = false;
+                    e.dying = true;     
+                    e.dyingTimer = 0.0f;  
                     p.alive = false;
                     break;
                 }
@@ -318,6 +328,15 @@ int main()
         for (auto& e : enemies)
         {
             if (!e.alive) continue;
+            
+            // Dying animation timer
+            if (e.dying)
+            {
+                e.dyingTimer += dt;
+                if (e.dyingTimer >= 1.0f)
+                    e.alive = false;
+                continue; // s'arrête, ne bouge plus, ne tape plus
+            }
 
             // Direction vers le joueur
             float dx = playerX - e.x;
@@ -485,10 +504,16 @@ int main()
             float db = (b.x - playerX) * (b.x - playerX) + (b.y - playerY) * (b.y - playerY);
             return da > db; // plus loin d'abord
         });
-        // Enemies drawing 
+        // Enemy drawing 
         for (auto& e : enemies)
         {
             if (!e.alive) continue;
+
+            // Sprite selector depending on state (normal or hit)
+            const uint8_t* texPixels = e.dying ? enemyHitPixels : enemyPixels;
+            sf::Vector2u   texSz     = e.dying ? enemyHitTexSize : enemyTexSize;
+
+
             // Direction et plan caméra corrects
             float dirX = std::cos(angle);
             float dirY = std::sin(angle);
@@ -531,13 +556,13 @@ int main()
                     texY = std::max(0, std::min((int)enemyTexSize.y - 1, texY));
 
                     // MODIF : accès direct au lieu de getPixel
-                    int pixelIndex = (texY * enemyTexSize.x + texXClamped) * 4;
-                    if (enemyPixels[pixelIndex + 3] < 128) continue;
+                    int pixelIndex = (texY * texSz.x + texXClamped) * 4;
+                    if (texPixels[pixelIndex + 3] < 128) continue;
 
                     int index = (y * SCREEN_W + x) * 4;
-                    pixels[index]   = enemyPixels[pixelIndex];
-                    pixels[index+1] = enemyPixels[pixelIndex + 1];
-                    pixels[index+2] = enemyPixels[pixelIndex + 2];
+                    pixels[index]   = texPixels[pixelIndex];
+                    pixels[index+1] = texPixels[pixelIndex + 1];
+                    pixels[index+2] = texPixels[pixelIndex + 2];
                     pixels[index+3] = 255;
                 }
             }
