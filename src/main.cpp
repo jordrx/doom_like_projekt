@@ -473,6 +473,13 @@ int main()
                 pixels[index+3] = 255;
             }
         }
+        // sort enemies by distance to player (farther first)
+        std::sort(enemies.begin(), enemies.end(), [&](const Enemy& a, const Enemy& b)
+        {
+            float da = (a.x - playerX) * (a.x - playerX) + (a.y - playerY) * (a.y - playerY);
+            float db = (b.x - playerX) * (b.x - playerX) + (b.y - playerY) * (b.y - playerY);
+            return da > db; // plus loin d'abord
+        });
         // Enemies
         for (auto& e : enemies)
         {
