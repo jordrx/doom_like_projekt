@@ -2,6 +2,7 @@
 #include <CMath>
 #include <string>
 #include <cstdint>
+#include <algorithm> // for std::remove_if
 
 const int MAP_W = 8;
 const int MAP_H = 8;
@@ -14,6 +15,21 @@ const int SCREEN_W = 800;
 const int SCREEN_H = 600;
 
 const float MAX_DEATH = 20.0f;
+
+//  Config sprite sheets weapon
+// Each file is a horizontal strip of N frames side by side
+const int   IDLE_FRAMES       = 2;     // frames dans weapon_idle.png
+const int   SHOOT_FRAMES      = 3;     // frames dans weapon_shoot.png
+const int   RELOAD_FRAMES     = 4;     // frames dans weapon_reload.png
+const float IDLE_FRAME_DUR    = 0.20f;
+const float SHOOT_FRAME_DUR   = 0.06f;
+const float RELOAD_FRAME_DUR  = 0.09f;
+const int   GUN_DISPLAY_W     = 200;   // taille d'affichage à l'écran (pixels)
+const int   GUN_DISPLAY_H     = 150;
+
+// Projectile config
+const float PROJ_SPEED = 12.0f; // cases/seconde
+const float PROJ_SCALE = 0.25f; // facteur de taille du billboard
 
 
 float playerHP = 100.0f;
@@ -35,11 +51,59 @@ struct Enemy {
     float speed = 1.5f;
 };
 
+struct Projectile {
+    float x, y;   // position monde
+    float dx, dy; // direction normalisée
+    bool  alive;
+};
+
+
 std::vector<Enemy> enemies = {
     {2.0f, 2.0f, true},
     {5.0f, 2.0f, true},
     {5.0f, 5.0f, true},
 };
+
+// draw weapon sprite from the given sheet and frame, with vertical offset
+std::vector<Projectile> projectiles;
+
+void drawWeaponSprite(
+    std::vector<uint8_t>& pixels,
+    const sf::Image& sheet,
+    int frame, int nFrames,
+    float yOffset)
+{
+    sf::Vector2u sz = sheet.getSize();
+    int frameW = sz.x / nFrames;
+    int frameH = sz.y;
+
+    int baseX = SCREEN_W / 2 - GUN_DISPLAY_W / 2;
+    int baseY = (int)(SCREEN_H - GUN_DISPLAY_H + yOffset);
+
+    for (int y = 0; y < GUN_DISPLAY_H; y++)
+    {
+        for (int x = 0; x < GUN_DISPLAY_W; x++)
+        {
+            int sx = baseX + x;
+            int sy = baseY + y;
+            if (sx < 0 || sx >= SCREEN_W || sy < 0 || sy >= SCREEN_H) continue;
+
+            int texX = frame * frameW + x * frameW / GUN_DISPLAY_W;
+            int texY = y * frameH / GUN_DISPLAY_H;
+            texX = std::max(0, std::min((int)sz.x - 1, texX));
+            texY = std::max(0, std::min((int)sz.y - 1, texY));
+
+            sf::Color c = sheet.getPixel(sf::Vector2u(texX, texY));
+            if (c.a < 128) continue; // transparent → skip
+
+            int index = (sy * SCREEN_W + sx) * 4;
+            pixels[index]   = c.r;
+            pixels[index+1] = c.g;
+            pixels[index+2] = c.b;
+            pixels[index+3] = 255;
+        }
+    }
+}
 
 int main()
 {
@@ -71,12 +135,24 @@ int main()
         return -1;
     sf::Vector2u enemyTexSize = enemyTexture.getSize();
 
+    // Projectile texture
+    sf::Image projTexture;
+    if (!projTexture.loadFromFile("projectile.png"))
+        return -1;
+    sf::Vector2u projTexSize = projTexture.getSize();
+
+    // Sprite sheets of the gun
+    sf::Image sheetIdle, sheetShoot, sheetReload;
+    if (!sheetIdle  .loadFromFile("weapon_idle.png"))   return -1;
+    if (!sheetShoot .loadFromFile("weapon_shoot.png"))  return -1;
+    if (!sheetReload.loadFromFile("weapon_reload.png")) return -1;
 
     // Gun
     enum GunState { IDLE, SHOOT, RELOAD };
     GunState gunState = IDLE;
-    float gunY = 0.0f;        // offset vertical du fusil (0 = position normale)
-    float gunTimer = 0.0f;    // timer pour l'animation
+    float gunY = 0.0f;        // vertical offset for the gun bob/shoot animation
+    float gunTimer = 0.0f;    // animation timer
+    int   gunFrame = 0; // actual frame of the current animation
 
     window.setMouseCursorVisible(false);
     //game loop
@@ -84,79 +160,78 @@ int main()
     {
         
         float dt = clock.restart().asSeconds();
+
         window.setTitle("x: " + std::to_string(playerX) + " y: " + std::to_string(playerY) + " angle: " + std::to_string(angle));
+        
 
         while (auto event = window.pollEvent())
         {
             if (event->is<sf::Event::Closed>())
                 window.close();
         }
+
         // Shoot detection
         if (sf::Mouse::isButtonPressed(sf::Mouse::Button::Left) && gunState == IDLE)
         {
             gunState = SHOOT;
+            gunFrame = 0; // AJOUT : repart de la première frame
             gunTimer = 0.0f;
 
-            float dirX = std::cos(angle);
-            float dirY = std::sin(angle);
-            float planeX = -std::sin(angle) * 0.66f;
-            float planeY =  std::cos(angle) * 0.66f;
-
-            Enemy* target = nullptr;       // ennemi le plus proche dans le viseur
-            float  closestDist = 1e9f;
-
-            for (auto& e : enemies)
-            {
-                if (!e.alive) continue;
-
-                float ex = e.x - playerX;
-                float ey = e.y - playerY;
-
-                float invDet = 1.0f / (planeX * dirY - dirX * planeY);
-                float transformX = invDet * (dirY * ex - dirX * ey);
-                float transformY = invDet * (-planeY * ex + planeX * ey);
-
-                if (transformY <= 0) continue;
-
-                int spriteScreenX = (int)((SCREEN_W / 2) * (1 + transformX / transformY));
-                int spriteH = std::abs((int)(SCREEN_H / transformY));
-                int spriteW = spriteH;
-
-                int leftX  = spriteScreenX - spriteW / 2;
-                int rightX = spriteScreenX + spriteW / 2;
-
-                bool inCrosshair = (SCREEN_W / 2 >= leftX && SCREEN_W / 2 <= rightX
-                                    && transformY < zBuffer[SCREEN_W / 2]);
-
-                // Garde uniquement le plus proche parmi ceux dans le viseur
-                if (inCrosshair && transformY < closestDist)
-                {
-                    closestDist = transformY;
-                    target = &e;
-                }
-            }
-
-            if (target)
-                target->alive = false;
+            // AJOUT : spawn un projectile dans la direction du regard
+            Projectile p;
+            p.x     = playerX;
+            p.y     = playerY;
+            p.dx    = std::cos(angle);
+            p.dy    = std::sin(angle);
+            p.alive = true;
+            projectiles.push_back(p);
         }
 
         // Animation
+        gunTimer += dt; // MODIF : déplacé ici pour être commun aux 3 états
         if (gunState == SHOOT)
         {
-            gunY -= 800.0f * dt;  // remonte vite
-            gunTimer += dt;
-            if (gunTimer > 0.08f) // après 80ms passe en reload
-                gunState = RELOAD;
+            gunY += 300.0f * dt;  // recul vers le bas
+            if (gunTimer >= SHOOT_FRAME_DUR)
+            {
+                gunTimer -= SHOOT_FRAME_DUR;
+                gunFrame++;
+                if (gunFrame >= SHOOT_FRAMES)
+                {
+                    gunState = RELOAD;
+                    gunFrame = 0;
+                    gunTimer = 0.0f;
+                }
+            }
         }
         else if (gunState == RELOAD)
         {
-            gunY += 400.0f * dt;  // redescend doucement
-            if (gunY >= 0.0f)
+            gunY -= 200.0f * dt;  // redescend doucement
+            if (gunY < 0.0f) gunY = 0.0f;
+            if (gunTimer >= RELOAD_FRAME_DUR)
             {
-                gunY = 0.0f;
-                gunState = IDLE;
+                gunTimer -= RELOAD_FRAME_DUR;
+                gunFrame++;
+                if (gunFrame >= RELOAD_FRAMES)
+                {
+                    gunY = 0.0f;
+                    gunState = IDLE;
+                    gunFrame = 0;
+                    gunTimer = 0.0f;
+                }
             }
         }
+        else // IDLE
+        {
+            // Légère oscillation de la main (bob)
+            gunY = std::sin(gunTimer * 3.0f) * 5.0f;
+            if (gunTimer >= IDLE_FRAME_DUR)
+            {
+                gunTimer -= IDLE_FRAME_DUR;
+                gunFrame = (gunFrame + 1) % IDLE_FRAMES;
+            }
+        }
+        
         
         // Player Rotation
         if(sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left))
@@ -201,6 +276,41 @@ int main()
             if (map[int(playerY)][int(playerX + strafeX)] == 0) playerX += strafeX;
             if (map[int(playerY + strafeY)][int(playerX)] == 0) playerY += strafeY;
         }
+       
+        // AJOUT : mise à jour des projectiles
+        for (auto& p : projectiles)
+        {
+            if (!p.alive) continue;
+
+            p.x += p.dx * PROJ_SPEED * dt;
+            p.y += p.dy * PROJ_SPEED * dt;
+
+            // Collision mur
+            if (map[(int)p.y][(int)p.x] == 1)
+            {
+                p.alive = false;
+                continue;
+            }
+
+            // Collision ennemis
+            for (auto& e : enemies)
+            {
+                if (!e.alive) continue;
+                float ex = e.x - p.x;
+                float ey = e.y - p.y;
+                if (ex * ex + ey * ey < 0.3f * 0.3f)
+                {
+                    e.alive = false;
+                    p.alive = false;
+                    break;
+                }
+            }
+        }
+        // Nettoyage des projectiles morts
+        projectiles.erase(
+            std::remove_if(projectiles.begin(), projectiles.end(),
+                [](const Projectile& p){ return !p.alive; }),
+            projectiles.end());
        
         // Enemy Movement
         for (auto& e : enemies)
@@ -423,7 +533,63 @@ int main()
                 }
             }
         }
+        
+        // AJOUT : Projectiles (billboard, même logique que les ennemis)
+        for (auto& p : projectiles)
+        {
+            if (!p.alive) continue;
 
+            float dirX = std::cos(angle);
+            float dirY = std::sin(angle);
+            float planeX = -std::sin(angle) * std::tan(FOV / 2.0f);
+            float planeY =  std::cos(angle) * std::tan(FOV / 2.0f);
+
+            float ex = p.x - playerX;
+            float ey = p.y - playerY;
+
+            float invDet = 1.0f / (planeX * dirY - dirX * planeY);
+            float transformX = invDet * (dirY * ex - dirX * ey);
+            float transformY = invDet * (-planeY * ex + planeX * ey);
+
+            if (transformY <= 0) continue;
+
+            int spriteScreenX = (int)((SCREEN_W / 2) * (1 + transformX / transformY));
+
+            // PROJ_SCALE rend le poisson plus petit que les ennemis
+            int spriteH = std::abs((int)(SCREEN_H / transformY * PROJ_SCALE));
+            int spriteW = spriteH;
+
+            int topY  = (SCREEN_H - spriteH) / 2;
+            int botY  = (SCREEN_H + spriteH) / 2;
+            int leftX = spriteScreenX - spriteW / 2;
+            int rightX= spriteScreenX + spriteW / 2;
+
+            for (int x = leftX; x < rightX; x++)
+            {
+                if (x < 0 || x >= SCREEN_W) continue;
+                if (transformY >= zBuffer[x]) continue;
+
+                int texX = (int)((x - leftX) * projTexSize.x / spriteW);
+                int texXClamped = std::max(0, std::min((int)projTexSize.x - 1, texX));
+
+                for (int y = topY; y < botY; y++)
+                {
+                    if (y < 0 || y >= SCREEN_H) continue;
+
+                    int texY = (int)((y - topY) * projTexSize.y / spriteH);
+                    texY = std::max(0, std::min((int)projTexSize.y - 1, texY));
+
+                    sf::Color color = projTexture.getPixel(sf::Vector2u(texXClamped, texY));
+                    if (color.a < 128) continue;
+
+                    int index = (y * SCREEN_W + x) * 4;
+                    pixels[index]   = color.r;
+                    pixels[index+1] = color.g;
+                    pixels[index+2] = color.b;
+                    pixels[index+3] = 255;
+                }
+            }
+        }
         // Crosshair
         int cx = SCREEN_W / 2;
         int cy = SCREEN_H / 2;
@@ -442,44 +608,16 @@ int main()
             pixels[index] = 255; pixels[index+1] = 255; pixels[index+2] = 255; pixels[index+3] = 255;
         }
 
-        // Gun drawing
-        int gunW = 120;
-        int gunH = 80;
-        int gunBaseX = SCREEN_W / 2 - gunW / 2;
-        int gunBaseY = (int)(SCREEN_H - gunH + gunY);
 
-        for (int y = 0; y < gunH; y++)
+        // MODIF : Gun drawing — remplace le dessin procédural par le sprite sheet
         {
-            for (int x = 0; x < gunW; x++)
-            {
-                int screenX = gunBaseX + x;
-                int screenY = gunBaseY + y;
+            const sf::Image* sheet = &sheetIdle;
+            int nFrames = IDLE_FRAMES;
+            if      (gunState == SHOOT)  { sheet = &sheetShoot;  nFrames = SHOOT_FRAMES;  }
+            else if (gunState == RELOAD) { sheet = &sheetReload; nFrames = RELOAD_FRAMES; }
 
-                if (screenX < 0 || screenX >= SCREEN_W || screenY < 0 || screenY >= SCREEN_H)
-                    continue;
-
-                int index = (screenY * SCREEN_W + screenX) * 4;
-
-                // Canon
-                if (x >= 50 && x <= 70 && y <= 20)
-                {
-                    pixels[index] = 80; pixels[index+1] = 80; pixels[index+2] = 80;
-                }
-                // Corps du fusil
-                else if (x >= 20 && x <= 100 && y >= 15 && y <= 50)
-                {
-                    pixels[index] = 60; pixels[index+1] = 40; pixels[index+2] = 20;
-                }
-                // Crosse
-                else if (x >= 60 && x <= 110 && y >= 45 && y <= 75)
-                {
-                    pixels[index] = 80; pixels[index+1] = 50; pixels[index+2] = 25;
-                }
-                else
-                    continue; // transparent
-
-                pixels[index+3] = 255;
-            }
+            int safeFrame = std::min(gunFrame, nFrames - 1);
+            drawWeaponSprite(pixels, *sheet, safeFrame, nFrames, gunY);
         }
 
         // Health bar background
@@ -545,6 +683,16 @@ int main()
             sf::CircleShape dot(4);
             dot.setFillColor(sf::Color::Green);
             dot.setPosition(sf::Vector2f(e.x * TILE - 4, e.y * TILE - 4));
+            window.draw(dot);
+        }
+
+        // AJOUT : Projectiles on minimap
+        for (auto& p : projectiles)
+        {
+            if (!p.alive) continue;
+            sf::CircleShape dot(2);
+            dot.setFillColor(sf::Color::Yellow);
+            dot.setPosition(sf::Vector2f(p.x * TILE - 2, p.y * TILE - 2));
             window.draw(dot);
         }
 
