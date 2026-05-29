@@ -31,14 +31,17 @@ const int   GUN_DISPLAY_H     = 150;
 const float PROJ_SPEED = 12.0f; // cases/seconde
 const float PROJ_SCALE = 0.25f; // facteur de taille du billboard
 
+// Enemy spawn config
+const float SPAWN_INTERVAL = 2.5f;  // secondes entre chaque spawn
+const int   MAX_ENEMIES    = 10;    // limite d'ennemis vivants simultanément
 
 float playerHP = 100.0f;
 
 int map[MAP_H][MAP_W] = {
     {1, 1, 1, 1, 1, 1, 1, 1},
     {1, 0, 0, 0, 0, 0, 0, 1},
-    {1, 0, 0, 0, 0, 0, 0, 1},
-    {1, 0, 0, 0, 0, 0, 0, 1},
+    {1, 0, 0, 1, 1, 1, 1, 1},
+    {1, 0, 0, 1, 0, 0, 0, 1},
     {1, 0, 0, 0, 0, 0, 0, 1},
     {1, 0, 0, 0, 0, 0, 0, 1},
     {1, 0, 0, 0, 0, 0, 0, 1},
@@ -68,6 +71,8 @@ std::vector<Enemy> enemies = {
 
 // draw weapon sprite from the given sheet and frame, with vertical offset
 std::vector<Projectile> projectiles;
+
+
 
 void drawWeaponSprite(
     std::vector<uint8_t>& pixels,
@@ -107,7 +112,7 @@ void drawWeaponSprite(
     }
 }
 
-void resetGame(float& playerX, float& playerY, float& angle, float& playerHP)
+void resetGame(float& playerX, float& playerY, float& angle, float& playerHP, float& spawnTimer)
 {
     playerX = 3.0f;
     playerY = 3.0f;
@@ -119,12 +124,46 @@ void resetGame(float& playerX, float& playerY, float& angle, float& playerHP)
         {5.0f, 5.0f, true},
     };
     projectiles.clear();
+    spawnTimer = 0.0f;
+}
+
+void spawnEnemy(float playerX, float playerY)
+{
+    // Points de spawn fixes aux 4 coins de la map (loin du joueur)
+    const float spawnPoints[][2] = {
+        {1.5f, 1.5f},
+        {6.5f, 1.5f},
+        {6.5f, 6.5f},
+        {1.5f, 6.5f},
+    };
+
+    // Cherche le point de spawn le plus loin du joueur
+    float bestDist = -1.0f;
+    int   bestIdx  = 0;
+    for (int i = 0; i < 4; i++)
+    {
+        float dx = spawnPoints[i][0] - playerX;
+        float dy = spawnPoints[i][1] - playerY;
+        float d  = dx * dx + dy * dy;
+        if (d > bestDist) { bestDist = d; bestIdx = i; }
+    }
+
+    Enemy e;
+    e.x     = spawnPoints[bestIdx][0];
+    e.y     = spawnPoints[bestIdx][1];
+    e.alive = true;
+    e.dying = false;
+    e.dyingTimer = 0.0f;
+    e.speed = 1.5f + (enemies.size() * 0.1f); // légère accélération au fil du temps
+    enemies.push_back(e);
 }
 
 int main()
 {
     sf::RenderWindow window(sf::VideoMode({800, 600}), "Ma fenetre SFML 3");
-    
+
+    float spawnTimer = 0.0f;
+
     float playerX = 3.0f;
     float playerY = 3.0f;
     float angle = 0.0f;
@@ -221,7 +260,7 @@ int main()
 
                 if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Space))
                 {
-                    resetGame(playerX, playerY, angle, playerHP);
+                    resetGame(playerX, playerY, angle, playerHP, spawnTimer);
                     gameState = PLAYING;
                 }
                 break;
@@ -371,7 +410,17 @@ int main()
                     std::remove_if(projectiles.begin(), projectiles.end(),
                         [](const Projectile& p){ return !p.alive; }),
                     projectiles.end());
-            
+                
+                // Spawn progressif d'ennemis
+                int aliveCount = 0;
+                for (auto& e : enemies) if (e.alive) aliveCount++;
+
+                spawnTimer += dt;
+                if (spawnTimer >= SPAWN_INTERVAL && aliveCount < MAX_ENEMIES)
+                {
+                    spawnEnemy(playerX, playerY);
+                    spawnTimer = 0.0f;
+                }
                 // Enemy Movement
                 for (auto& e : enemies)
                 {
@@ -803,7 +852,7 @@ int main()
 
                 if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Space))
                 {
-                    resetGame(playerX, playerY, angle, playerHP);
+                    resetGame(playerX, playerY, angle, playerHP, spawnTimer);
                     gameState = PLAYING;
                 }
                 break;
@@ -825,7 +874,7 @@ int main()
 
                 if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Space))
                 {
-                    resetGame(playerX, playerY, angle, playerHP);
+                    resetGame(playerX, playerY, angle, playerHP, spawnTimer);
                     gameState = PLAYING;
                 }
                 break;
